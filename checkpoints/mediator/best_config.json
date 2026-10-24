@@ -1,0 +1,32 @@
+{
+    "exp_name": "exp_c_explore",
+    "task": "train_c",
+    "data_name": "criteo",
+    "model_type": "tarnet_proposed",
+    "loss_type": "strata_weighted",
+    "c_fusion_mode": "joint_emb",
+    "ray_dir": "./ray_results",
+    "best_c_model_path": "./checkpoints/best_c_model.pth",
+    "best_y_model_path": "./checkpoints/best_y_model.pth",
+    "model": "TARNET",
+    "version": "c_v1_base",
+    "c_ckpt_path": null,
+    "mode": "tune",
+    "run_hierarchy": "criteo/train_c/TARNET/c_v1_base/exp_c_explore",
+    "num_workers": 0,
+    "num_per_gpu": 0.125,
+    "seed": 42,
+    "learning_rate": 0.001,
+    "weight_decay": 1e-06,
+    "hidden_dims": [
+        128,
+        64,
+        32
+    ],
+    "dropout_rate": 0.0,
+    "batch_size": 262144,
+    "accumulate_steps": 4,
+    "focal_gamma": 0.0,
+    "focal_alpha": 0.5,
+    "align_method": "none"
+}

@@ -1,0 +1,12 @@
+1.0.0
+
+Released Criteo run: 2026-07-21
+Package date: 2026-10-23
+
+Python 3.9.21
+torch 2.5.1+cu121
+numpy 1.26.4
+pandas 2.2.2
+pyarrow 16.1.0
+scikit-learn 1.5.2
+tqdm 4.67.1

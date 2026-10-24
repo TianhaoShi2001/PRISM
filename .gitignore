@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+data/criteo/
+data/*.csv
+data/*.csv.gz
+configs/_lambda_run.json
+ckpts/
+results/
+ray_results/
