@@ -1,7 +1,7 @@
 1.0.0
 
-Released Criteo run: 2026-07-21
-Package date: 2026-10-23
+Public release: 2026-11-03
+Criteo checkpoint trained: 2026-07-21
 
 Python 3.9.21
 torch 2.5.1+cu121

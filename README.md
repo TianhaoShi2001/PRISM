@@ -1,6 +1,6 @@
 # PRISM
 
-Released Criteo run of PRISM, with the training code, the split used for that run, and two checkpoints. Each checkpoint sits next to the `best_config.json` that built it. Evaluation reads that config by replacing the filename `best_model.pth` with `best_config.json`.
+**Version 1.0.0** (2026-11-03). Released Criteo run of PRISM, with the training code, the split used for that run, and two checkpoints. Each checkpoint sits next to the `best_config.json` that built it. Evaluation reads that config by replacing the filename `best_model.pth` with `best_config.json`.
 
 Run every command from the repository root.
 
