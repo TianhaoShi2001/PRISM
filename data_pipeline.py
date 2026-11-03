@@ -1,3 +1,4 @@
+import json
 import os
 import torch
 import numpy as np
@@ -18,18 +19,34 @@ def get_base_config():
         "best_y_model_path": "./checkpoints/best_y_model.pth",
     }
 
+def _criteo_population_ate(data_dir: str) -> float:
+    """Full-population outcome ATE on all released Criteo rows.
+
+    Lift@k divides by this global ATE, never by the ATE of the split being
+    scored. The dataset table rounds the same quantity to +0.0012; the exact
+    value on the 13,979,592-row release split is used here.
+    """
+    ate_path = os.path.join(data_dir, "population_ate.json")
+    if os.path.exists(ate_path):
+        with open(ate_path, "r", encoding="utf-8") as f:
+            return float(json.load(f)["population_ate"])
+    # Exact E[Y|T=1]-E[Y|T=0] on train+valid+test for this split order.
+    return 0.0011518730521316279
+
+
 def get_data_spec(data_name: str) -> dict:
     if data_name == "criteo":
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "criteo")
         return {
             "name": "criteo",
-            "data_dir": os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "criteo"), 
+            "data_dir": data_dir,
             "feature_cols": [f"f{i}" for i in range(12)], 
             "categorical_cols": [],                       
             "categorical_cardinalities": {},
             "treatment_col": "treatment",
             "outcome_col": "conversion",
             "mediator_col": "visit",
-            "population_ate": 0.0012,
+            "population_ate": _criteo_population_ate(data_dir),
         }
     elif data_name == "hillstrom":
         return {

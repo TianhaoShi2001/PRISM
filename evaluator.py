@@ -30,10 +30,11 @@ def calculate_uplift_metrics(target_true, uplift_pred, t, prefix="Target", ate=N
     total on the vertical axis, so each curve ends at 1.
 
     AUUC is the area under the scaled uplift curve. Qini is the area under
-    the scaled Qini curve minus 1/2. Lift@10 and Lift@30 are the treated-minus-control
-    outcome rate in the top 10% and 30%, divided by ``ate``. For Criteo outcomes
-    that value is the paper's full-population ATE, +0.0012, not the ATE of the
-    split being scored.
+    the scaled Qini curve minus 1/2. Lift@10 and Lift@30 are both reported:
+    each is the treated-minus-control outcome rate in that top prefix,
+    divided by ``ate``. For Criteo outcomes, pass the full-population ATE
+    (all 13,979,592 rows, ≈0.00115187). Do not use the test/valid split ATE,
+    and do not use the table rounding +0.0012.
     """
     target_true, uplift_pred, t = np.array(target_true), np.array(uplift_pred), np.array(t)
     if len(target_true) == 0: return {}

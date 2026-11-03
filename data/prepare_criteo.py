@@ -16,6 +16,7 @@ conversion in the model are the file's treatment, visit, and conversion columns.
 
 import argparse
 import gzip
+import json
 import shutil
 import urllib.request
 from pathlib import Path
@@ -90,6 +91,25 @@ def main():
             f"P(visit=1)={part.visit.mean():.6f}, "
             f"P(conversion=1)={part.conversion.mean():.6f}"
         )
+
+    # Global outcome ATE on every row. Lift@10 / Lift@30 divide by this value,
+    # not by the ATE of the split under evaluation.
+    t = frame["treatment"].to_numpy()
+    y = frame["conversion"].to_numpy()
+    population_ate = float(y[t == 1].mean() - y[t == 0].mean())
+    ate_path = OUT_DIR / "population_ate.json"
+    with open(ate_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "population_ate": population_ate,
+                "n": int(len(frame)),
+                "definition": "E[conversion|treatment=1] - E[conversion|treatment=0] on all rows",
+            },
+            f,
+            indent=2,
+        )
+        f.write("\n")
+    print(f"population_ate={population_ate:.12f} -> {ate_path}")
     print(f"wrote {OUT_DIR}")
 
 

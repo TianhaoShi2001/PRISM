@@ -48,7 +48,10 @@ A `.csv.gz` path is accepted and unpacked first. If `--raw` is omitted, the scri
 data/criteo/train.parquet
 data/criteo/valid.parquet
 data/criteo/test.parquet
+data/criteo/population_ate.json
 ```
+
+`population_ate.json` stores the full-population outcome ATE on all 13,979,592 rows, \(E[Y\mid T=1]-E[Y\mid T=0]\approx 0.00115187\). The dataset table rounds this to \(+0.0012\). Lift@10 and Lift@30 both divide by this global ATE, never by the ATE of the train/valid/test split under evaluation.
 
 ## 2. Evaluate the released checkpoint
 
@@ -58,7 +61,7 @@ This loads the seed-42 outcome weights and scores the three splits. It does not 
 python main.py --mode eval --eval_ckpt checkpoints/criteo_seed42/best_model.pth --cuda 0
 ```
 
-Metrics are written to `results/criteo/prism/final_metrics.json`. On the test split the seed-42 checkpoint gives AUUC 0.9145, Qini 0.4177, Lift@10 7.1703, and Lift@30 2.9908.
+Metrics are written to `results/criteo/prism/final_metrics.json`. On the test split the seed-42 checkpoint gives AUUC 0.9145, Qini 0.4177, Lift@10 7.4699, and Lift@30 3.1158.
 
 ## 3. Train
 
@@ -103,11 +106,11 @@ The mediator is the Stage I TARNet, seed 42. The outcome file is the seed-42 PRI
 
 ## Metrics
 
-Users are ranked by predicted uplift, `sigmoid(y1) - sigmoid(y0)`. AUUC is the area under the uplift curve after the curve is scaled to end at 1. Qini is the area under the scaled Qini curve, minus 1/2. Lift@10 and Lift@30 are the treated-minus-control conversion gap in that prefix, divided by the full-population Criteo ATE, +0.0012. Early stopping uses validation AUUC.
+Users are ranked by predicted uplift, `sigmoid(y1) - sigmoid(y0)`. AUUC is the area under the uplift curve after the curve is scaled to end at 1. Qini is the area under the scaled Qini curve, minus 1/2. Lift@10 and Lift@30 are both reported: each is the treated-minus-control conversion gap in that prefix, divided by the full-population Criteo ATE (≈0.00115187 on all rows; not the test-split ATE, and not the rounded table value +0.0012). Early stopping uses validation AUUC.
 
 | Seed | Valid AUUC | Test AUUC | Test Qini | Test Lift@10 | Test Lift@30 |
 |---|---:|---:|---:|---:|---:|
-| 42 | 0.8940 | 0.9145 | 0.4177 | 7.1703 | 2.9908 |
-| 1042 | 0.8844 | 0.9108 | 0.4139 | 7.0472 | 2.9668 |
-| 2042 | 0.8923 | 0.9149 | 0.4173 | 7.1208 | 2.9114 |
-| mean |  | 0.9134 | 0.4163 | 7.1128 | 2.9564 |
+| 42 | 0.8940 | 0.9145 | 0.4177 | 7.4699 | 3.1158 |
+| 1042 | 0.8844 | 0.9108 | 0.4139 | 7.3416 | 3.0908 |
+| 2042 | 0.8923 | 0.9149 | 0.4173 | 7.4183 | 3.0330 |
+| mean |  | 0.9134 | 0.4163 | 7.4099 | 3.0799 |
