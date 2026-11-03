@@ -6,13 +6,31 @@ Run every command from the repository root.
 
 ## Setup
 
-The released run used Python 3.9.21, PyTorch 2.5.1 with CUDA 12.1, NumPy 1.26.4, pandas 2.2.2, pyarrow 16.1.0, scikit-learn 1.5.2, and tqdm 4.67.1. The same pins are in `requirements.txt` and `VERSION`.
+### Hardware and conda
+
+The released Criteo run was trained and evaluated on a Linux machine with **8× NVIDIA A40** GPUs (46,068 MiB each; NVIDIA driver 525.147.05), using the conda environment **`aigc`**:
+
+```text
+/path/to/anaconda3/envs/aigc   # Python 3.9.21
+```
+
+In that environment, `torch.cuda.is_available()` is true and `torch.cuda.device_count()` is 8. Recreate a matching env with:
+
+```bash
+conda create -n aigc python=3.9.21 -y
+conda activate aigc
+pip install -r requirements.txt
+```
+
+### Packages
+
+The released run used Python 3.9.21, PyTorch 2.5.1 with CUDA 12.1 (`torch==2.5.1+cu121`), NumPy 1.26.4, pandas 2.2.2, pyarrow 16.1.0, scikit-learn 1.5.2, and tqdm 4.67.1. The same pins are in `requirements.txt` and `VERSION`.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`--cuda` selects the visible GPU. `--cuda 0` is the default.
+`--cuda` selects the visible GPU. `--cuda 0` is the default. One A40 is enough for the released batch size (262144 with four gradient-accumulation steps).
 
 ## 1. Prepare the data
 
