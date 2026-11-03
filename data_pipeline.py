@@ -8,15 +8,15 @@ from torch.utils.data._utils.collate import default_collate
 
 def get_base_config():
     return {
-        "exp_name": "criteo_baseline_run",
-        "task": "train_y",               
+        "exp_name": "prism",
+        "task": "train_y",
         "data_name": "criteo",
-        "model_type": "tarnet_proposed", 
-        "loss_type": "strata_weighted",  
-        "c_fusion_mode": "joint_emb",    
+        "model_type": "prism",
+        "loss_type": "prior_conflict",
+        "c_fusion_mode": "prism",
         "ray_dir": "./ray_results",
-        "best_c_model_path": "./checkpoints/best_c_model.pth", 
-        "best_y_model_path": "./checkpoints/best_y_model.pth",
+        "best_c_model_path": "./checkpoints/mediator/best_model.pth",
+        "best_y_model_path": "./checkpoints/criteo_seed42/best_model.pth",
     }
 
 def _criteo_population_ate(data_dir: str) -> float:
@@ -48,19 +48,8 @@ def get_data_spec(data_name: str) -> dict:
             "mediator_col": "visit",
             "population_ate": _criteo_population_ate(data_dir),
         }
-    elif data_name == "hillstrom":
-        return {
-            "name": "hillstrom",
-            "data_dir": "/NAS/shith/datasets2024/uplift/hillstrom",
-            "feature_cols": ["recency", "history_segment_id", "mens", "womens", "zip_code_id", "newbie", "channel_id"],
-            "categorical_cols": ["history_segment_id", "zip_code_id", "channel_id"],
-            "categorical_cardinalities": {"history_segment_id": 3, "zip_code_id": 3, "channel_id": 3},
-            "treatment_col": "treatment",
-            "outcome_col": "conversion",
-            "mediator_col": "visit",
-        }
     else:
-        raise ValueError(f"Unknown data_name: {data_name}")
+        raise ValueError(f"Unknown data_name: {data_name}. This release ships the Criteo split only.")
 
 class UpliftDataset(Dataset):
     """Parquet split preloaded as contiguous arrays."""

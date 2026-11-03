@@ -93,7 +93,7 @@ python main.py --mode reproduce --config_path checkpoints/mediator/best_config.j
 
 Do this before an outcome run only if you are replacing `checkpoints/mediator/best_model.pth`. The mediator output directory is the `run_hierarchy` in its config, with `seed_<seed>` appended.
 
-The released outcome config uses batch size 262144 and four gradient-accumulation steps. Both hidden widths are `[128, 64, 32]`. The mediator uses weight decay `1e-6`. The outcome model uses weight decay `1e-5`, gate temperature 1, and sample-weight strengths 1, 1, and 1. Its config does not set `conflict_renorm`, so the training code rescales each batch by the mean weight. There is no search step.
+The released outcome config uses batch size 262144 and four gradient-accumulation steps. Both hidden widths are `[128, 64, 32]`. The mediator uses weight decay `1e-6`. The outcome model uses weight decay `1e-5`, gate temperature 1, and prior-guided reweighting strength \(\lambda=1\) on the three misaligned treatment--outcome cells. Batch weights are mean-normalized. There is no search step.
 
 ## Checkpoints
 

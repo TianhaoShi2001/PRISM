@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 
 def main():
     parser = argparse.ArgumentParser(description="Train the released PRISM checkpoint config on Criteo.")
-    parser.add_argument("--seed", type=int, default=42, help="42 is the released checkpoint. 1042 and 2042 are the other reported seeds.")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed. The released checkpoint uses 42.")
     parser.add_argument("--cuda", default="0")
     parser.add_argument("--config", default="checkpoints/criteo_seed42/best_config.json")
     args = parser.parse_args()

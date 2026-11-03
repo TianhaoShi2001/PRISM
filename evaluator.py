@@ -143,21 +143,7 @@ def evaluate_and_dump(model, loader, device, task_name, save_path=None, max_step
         if task_name == "train_y":
             pi_dict = out.get("pi_dict", {}) if isinstance(out, dict) else (out[2] if len(out) > 2 else {})
 
-            if isinstance(out, dict) and out.get("ecup_0717new"):
-                # Apply sigmoid once. The probabilities are already pCTR * pCVR.
-                c0_logit, c1_logit = out["c_logits"]
-                cvr0_logit, cvr1_logit = out["cvr_logits"]
-                
-                c_out_0 = torch.sigmoid(c0_logit)
-                c_out_1 = torch.sigmoid(c1_logit)
-                
-                out_0 = c_out_0 * torch.sigmoid(cvr0_logit)
-                out_1 = c_out_1 * torch.sigmoid(cvr1_logit)
-                
-                c0_prob_all.append(c_out_0.cpu().numpy())
-                c1_prob_all.append(c_out_1.cpu().numpy())
-
-            elif isinstance(out, dict) and "c_logits" in out:
+            if isinstance(out, dict) and "c_logits" in out:
                 c0_logit, c1_logit = out["c_logits"]
                 c_out_0, c_out_1 = torch.sigmoid(c0_logit), torch.sigmoid(c1_logit)
                 out_0 = c_out_0 * torch.sigmoid(out["cvr_logits"][0])

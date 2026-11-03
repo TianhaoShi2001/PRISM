@@ -10,7 +10,8 @@ from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 
 from data_pipeline import UpliftDataset, uplift_collate_fn
-from models import *
+from models import TARNET_Baseline
+from prism import PRISM
 from losses import *
 from evaluator import evaluate_and_dump
 import numpy as np
@@ -76,210 +77,66 @@ def build_model(config, data_spec, device):
     cont_dim = len(data_spec["feature_cols"]) - len(data_spec.get("categorical_cols", []))
     cat_cards = data_spec.get("categorical_cardinalities", {})
     model_type = config.get("model", "TARNET")
-    
-    # None keeps each outcome head as one linear layer.
     head_hidden_dims = config.get("head_hidden_dims", None)
 
-    # Outcome TARNet variants load the frozen mediator before the branch below.
-    model_c = None
-    if config["task"] == "train_y" and model_type in ["TARNET", "TARNET_Baseline_PureV10"]:
-        c_path = config.get("c_ckpt_path")
-        
-        # Fall back to the outcome width if the mediator config is absent.
-        c_hidden_dims = config["hidden_dims"]
-        c_dropout_rate = config["dropout_rate"]
-        
-        # Read the mediator width from the config paired with its checkpoint.
-        if c_path and os.path.exists(c_path):
-            c_config_path = c_path.replace("best_model.pth", "best_config.json")
-            if os.path.exists(c_config_path):
-                try:
-                    with open(c_config_path, 'r') as f:
-                        c_cfg = json.load(f)
-                        c_hidden_dims = c_cfg.get("hidden_dims", c_hidden_dims)
-                        c_dropout_rate = c_cfg.get("dropout_rate", c_dropout_rate)
-                except Exception:
-                    pass
-        
-        # Build the mediator on the training device.
-        model_c = TARNET_Baseline(
-            continuous_dim=cont_dim, 
-            categorical_cardinalities=cat_cards, 
-            hidden_dims=c_hidden_dims, 
-            dropout_rate=c_dropout_rate
-        ).to(device)
-        
-        # Load the mediator weights when the checkpoint exists.
-        if c_path and os.path.exists(c_path):
-            model_c.load_state_dict(torch.load(c_path, map_location=device))
+    if model_type != "TARNET":
+        raise ValueError(
+            f"Unsupported model: {model_type}. This release trains TARNET (mediator) and PRISM (outcome)."
+        )
 
-    # TARNet outcome and mediator variants.
-    if model_type == "TARNET":
-        if config["task"] == "train_c":
-            return TARNET_Baseline(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"]).to(device)
-            
-        elif config["task"] == "train_y":
-            if config.get("c_fusion_mode") == "moe":
-                return TARNET_MoE(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_model=model_c, head_hidden_dims=head_hidden_dims).to(device)
-                
-            elif config.get("c_fusion_mode") == "res_moe": 
-                return TARNET_Residual_MoE(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_model=model_c, head_hidden_dims=head_hidden_dims).to(device)
-                
-            elif config.get("c_fusion_mode") == "v7_truncated_moe":
-                return TARNET_V7_Truncated_MoE(
-                    continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_model=model_c,
-                    truncation_mode=config.get("truncation_mode", "hard"), truncation_pct=config.get("truncation_pct", 0.05), truncation_temp=config.get("truncation_temp", 10.0), ema_momentum=config.get("ema_momentum", 0.9)
-                ).to(device)
-                
-            elif config.get("c_fusion_mode") == "v8_evolution_moe":
-                return TARNET_V8_Evolution_MoE(
-                    continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_model=model_c,
-                    v8_scheme=config.get("v8_scheme", 3), shared_emb_dim=config["hidden_dims"][-1], truncation_pct=config.get("truncation_pct", 0.05), truncation_temp=config.get("truncation_temp", 10.0), ema_momentum=config.get("ema_momentum", 0.9),
-                    head_hidden_dims=head_hidden_dims,
-                    align_temp = config.get('align_temp', 1)
-                ).to(device)
-                
-            elif config.get("c_fusion_mode") == "v11_aligned_moe":
-                return TARNET_V11_Aligned_MoE(
-                    continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_model=model_c,
-                    v11_scheme=config.get("v11_scheme", 4), align_type=config.get("align_type", "lift"), align_temp=config.get("align_temp", 1.0)
-                ).to(device)
-                
-            elif config.get("c_fusion_mode") == "ours_s4_conflict":
-                return TARNET_Ours_S4_Conflict(
-                    continuous_dim=cont_dim, categorical_cardinalities=cat_cards, 
-                    hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], 
-                    c_model=model_c, embedding_dim=8,
-                    head_hidden_dims=head_hidden_dims, 
-                    ours_s4_use_stop_grad=config.get("ours_s4_use_stop_grad", False) 
-                ).to(device)
-
-                
-            elif config.get("c_fusion_mode") == "ours_s6_conflict":
-                return TARNET_Ours_S6_Conflict(
-                    continuous_dim=cont_dim, categorical_cardinalities=cat_cards, 
-                    hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], 
-                    c_model=model_c, embedding_dim=8,
-                    ours_s6_temp=config.get("ours_s6_temp", 1.0),
-                    head_hidden_dims=head_hidden_dims, 
-                    ours_s6_use_stop_grad=config.get("ours_s6_use_stop_grad", False), 
-                    ours_s6_use_logit_clamp=config.get("ours_s6_use_logit_clamp", False), 
-                    ours_s6_clamp_val=config.get("ours_s6_clamp_val", 2.0)
-                ).to(device)
-                
-            else:
-                return TARNET_Proposed(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config["hidden_dims"], dropout_rate=config["dropout_rate"], c_fusion_mode=config["c_fusion_mode"], c_embedding_dim=config.get("c_embedding_dim", 4), c_model=model_c, head_hidden_dims=head_hidden_dims).to(device)
-
-    # Residual mixture that reuses the mediator loaded above.
-    elif model_type == "TARNET_Baseline_PureV10":
-        return TARNET_Residual_MoE(
-            continuous_dim=cont_dim, 
-            categorical_cardinalities=cat_cards, 
-            hidden_dims=config["hidden_dims"], 
-            dropout_rate=config["dropout_rate"], 
-            c_model=model_c,
-            head_hidden_dims=head_hidden_dims 
-        ).to(device)
-
-    # Other published baselines.
-    elif model_type == "MTMT":
-        return MTMT_STMT(
-            continuous_dim=cont_dim, categorical_cardinalities=cat_cards, num_experts=config.get("num_experts", 4), expert_type=config.get("expert_type", "mlp"), expert_hidden_dims=config.get("expert_hidden_dims", [64]), dropout_rate=config.get("dropout_rate", 0.1), t_emb_dim=config.get("t_emb_dim", 16) 
-        ).to(device)
-    elif model_type == "ECUP":
-        return ECUP_Model(
-            continuous_dim=cont_dim, categorical_cardinalities=cat_cards, d_dim=config.get("d_dim", 16), gamma=config.get("gamma", 1.0), tower_h=config.get("tower_h", 128), tae_h=config.get("tae_h", 64), num_heads=config.get("num_heads", 2)
-        ).to(device)
-    elif model_type == "MOTTO":
-        return MOTTO_Model(
-            continuous_dim=cont_dim, categorical_cardinalities=cat_cards, d_dim=config.get("d_dim", 16), bottom_dim=config.get("bottom_dim", 128), expert_hidden_dims=config.get("expert_hidden_dims", [64, 64]), tower_dim=config.get("tower_dim", 64), use_specific_experts=config.get("use_specific_experts", True)
-        ).to(device)
-    elif model_type == "TARNET_MT":
-        return TARNET_Naive_MT(
-            continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64, 32]), dropout_rate=config.get("dropout_rate", 0.0)
-        ).to(device)
-    elif model_type == "DragonNet":
-        return DragonNet(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64])).to(device)
-    elif model_type == "EUEN":
-        return EUEN(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64])).to(device)
-    elif model_type == "EUEN_Academic":
-        hidden_dims = config.get("hidden_dims", [128, 64])
-        dropout_rate = config.get("dropout_rate", 0.0)
-        return EUEN_Academic(
-            continuous_dim=cont_dim, 
-            categorical_cardinalities=cat_cards, 
-            hidden_dims=hidden_dims, 
-            dropout_rate=dropout_rate
-        ).to(device)
-    elif model_type == "EFIN_ours":
-        # EFIN embedding width is separate from hidden_dims.
-        embed_dim = config.get("efin_embed_dim", 16)
-        hidden_dims = config.get("hidden_dims", [128, 64])
-        return EFIN_ours(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, 
-                             embed_dim=embed_dim, hidden_dims=hidden_dims).to(device)
-    elif model_type == "CanniUplift":
-        return CanniUplift(
+    if config["task"] == "train_c":
+        return TARNET_Baseline(
             continuous_dim=cont_dim,
             categorical_cardinalities=cat_cards,
-            hidden_dims=config.get("hidden_dims", [128, 64]),
-            use_treat_attn=config.get("canniuplift_use_treat_attn", True),
-            attn_d_dim=config.get("canniuplift_attn_d_dim", 16),
-            attn_num_heads=config.get("canniuplift_attn_num_heads", 2),
-        ).to(device)
-    elif model_type == "EFIN_0717new":
-        return EFIN_0717new(
-            continuous_dim=cont_dim,
-            categorical_cardinalities=cat_cards,
-            hu_dim=config.get("efin_hu_dim", 128),
-            hc_dim=config.get("efin_hc_dim", 64),
-            is_self=config.get("efin_is_self", False),
-            act_type=config.get("efin_act_type", "elu"),
-            dropout_rate=config.get("efin_dropout", 0.0),
+            hidden_dims=config["hidden_dims"],
+            dropout_rate=config["dropout_rate"],
         ).to(device)
 
-    elif model_type == "ECUP_0717new":
-        return ECUP_0717new(
-            continuous_dim=cont_dim,
-            categorical_cardinalities=cat_cards,
-            d_dim=config.get("d_dim", 16),
-            gamma=config.get("gamma", 1.0),
-            tower_h=config.get("tower_h", 128),
-            tae_h=config.get("tae_h", 64),
-            num_heads=config.get("num_heads", 2)
-        ).to(device)
+    if config["task"] != "train_y":
+        raise ValueError(f"Unsupported task: {config['task']}")
 
-    elif model_type == "MTMT_0717new":
-        return MTMT_0717new(
-            continuous_dim=cont_dim,
-            categorical_cardinalities=cat_cards,
-            num_experts=config.get("num_experts", 4),
-            expert_type=config.get("expert_type", "mlp"),
-            expert_hidden_dims=config.get("expert_hidden_dims", [64]),
-            dropout_rate=config.get("dropout_rate", 0.1),
-            t_emb_dim=config.get("t_emb_dim", 16)
-        ).to(device)
-    elif model_type == "EFIN":
-        # This EFIN variant uses efin_embed_dim as its only hidden width.
-        efin_rank = config.get("efin_embed_dim", 64)
-        
-        return EFIN(
-            continuous_dim=cont_dim, 
-            categorical_cardinalities=cat_cards, 
-            efin_rank=efin_rank,
-            dropout_rate=config.get("dropout_rate", 0.0)
-        ).to(device)
-    elif model_type == "DESCN":
-        return DESCN(
-            continuous_dim=cont_dim, categorical_cardinalities=cat_cards, shared_dims=config.get("hidden_dims", [128]), tower_dims=config.get("hidden_dims", [128])
-        ).to(device)
-    elif model_type == "S_Learner":
-        return S_Learner(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64])).to(device)
-    elif model_type == "T_Learner":
-        return T_Learner(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64])).to(device)
-    elif model_type == "CFRNet":
-        return CFRNet(continuous_dim=cont_dim, categorical_cardinalities=cat_cards, hidden_dims=config.get("hidden_dims", [128, 64])).to(device)
-    else:
-        raise ValueError(f"Unsupported model: {model_type}")
+    if config.get("c_fusion_mode") != "prism":
+        raise ValueError(
+            f"Unsupported c_fusion_mode: {config.get('c_fusion_mode')}. "
+            "Use 'prism' for the released outcome model."
+        )
+
+    c_path = config.get("c_ckpt_path")
+    c_hidden_dims = config["hidden_dims"]
+    c_dropout_rate = config["dropout_rate"]
+    if c_path and os.path.exists(c_path):
+        c_config_path = c_path.replace("best_model.pth", "best_config.json")
+        if os.path.exists(c_config_path):
+            try:
+                with open(c_config_path, "r", encoding="utf-8") as f:
+                    c_cfg = json.load(f)
+                    c_hidden_dims = c_cfg.get("hidden_dims", c_hidden_dims)
+                    c_dropout_rate = c_cfg.get("dropout_rate", c_dropout_rate)
+            except Exception:
+                pass
+
+    model_c = TARNET_Baseline(
+        continuous_dim=cont_dim,
+        categorical_cardinalities=cat_cards,
+        hidden_dims=c_hidden_dims,
+        dropout_rate=c_dropout_rate,
+    ).to(device)
+    if c_path and os.path.exists(c_path):
+        model_c.load_state_dict(torch.load(c_path, map_location=device))
+
+    return PRISM(
+        continuous_dim=cont_dim,
+        categorical_cardinalities=cat_cards,
+        hidden_dims=config["hidden_dims"],
+        dropout_rate=config["dropout_rate"],
+        c_model=model_c,
+        embedding_dim=8,
+        head_hidden_dims=head_hidden_dims,
+        gate_temperature=config.get("gate_temperature", 1.0),
+        gate_stop_grad=config.get("gate_stop_grad", False),
+        gate_logit_clamp=config.get("gate_logit_clamp", False),
+        gate_clamp_val=config.get("gate_clamp_val", 2.0),
+    ).to(device)
 
 def run_final_evaluation(model, loaders_dict, device, config):
     run_hier = config.get("run_hierarchy", "default_run")
@@ -462,9 +319,9 @@ def train_trial(trial_cfg):
         # Stage 1 zeros the three reweighting strengths.
         current_cfg = trial_cfg.copy()
         if two_stage_mode and epoch <= stage1_epochs:
-            current_cfg["conflict_alpha_wool"] = 0.0
-            current_cfg["conflict_alpha_gold"] = 0.0
-            current_cfg["conflict_alpha_walkin"] = 0.0
+            current_cfg["conflict_alpha_treated_nonconvert"] = 0.0
+            current_cfg["conflict_alpha_treated_convert"] = 0.0
+            current_cfg["conflict_alpha_control_convert"] = 0.0
 
         # The first stage-2 epoch can freeze the encoder and shared base.
         if two_stage_mode and epoch == (stage1_epochs + 1) and freeze_base_in_stage2:
@@ -512,67 +369,10 @@ def train_trial(trial_cfg):
                     loss = cls_loss + align_weight * align_loss
                            
                 elif current_cfg["task"] == "train_y":
-                    if current_cfg.get("model") == "ECUP":
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_ecup_loss(preds_dict, y, c, t, current_cfg)
-                    elif current_cfg.get("model") == "MTMT":
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_mtmt_loss(
-                            preds_dict, y, c, t, preds_dict["pi_dict"], current_cfg, dro_criterion
-                        )
-                    elif current_cfg.get("model") == "EFIN_0717new":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_efin_0717new_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg)
-                    elif trial_cfg.get("model") == "CanniUplift":
-                        # Visit is the mediator label passed into the CanniUplift loss.
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_canniuplift_loss(y0_pred, y1_pred, y, t, c, pi_dict, trial_cfg)
-                    elif current_cfg.get("model") == "ECUP_0717new":
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_ecup_0717new_loss(preds_dict, y, c, t, current_cfg)
-
-                    elif current_cfg.get("model") == "MTMT_0717new":
-                        # Same output layout as MTMT, so the MTMT loss is reused.
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_mtmt_loss(
-                            preds_dict, y, c, t, preds_dict["pi_dict"], current_cfg , dro_criterion
-                        )
-                    elif current_cfg.get("model") == "MOTTO":
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_motto_loss(preds_dict, y, c, t, current_cfg)
-                    elif current_cfg.get("model") == "DragonNet":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_dragonnet_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg)
-                    elif current_cfg.get("model") == "EFIN":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_efin_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg)
-                    elif current_cfg.get("model") == "EFIN_ours":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_efin_ours_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg)
-                    elif current_cfg.get("model") == "S_Learner":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat, t=t) 
-                        loss, _ = compute_stage3_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg, dro_criterion=dro_criterion)
-                    elif current_cfg.get("model") == "TARNET_MT":
-                        preds_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_naive_mt_loss(
-                            preds_dict, y, c, t, preds_dict["pi_dict"], current_cfg, dro_criterion
-                        )
-                    elif current_cfg.get("model") == "CFRNet":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_stage3_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg, dro_criterion=dro_criterion)
-                        z = pi_dict["z"]
-                        z_t1, z_t0 = z[t == 1], z[t == 0]
-                        cfr_weight = current_cfg.get("cfr_weight", 0.1)
-                        if cfr_weight > 0 and z_t1.size(0) > 0 and z_t0.size(0) > 0:
-                            align_loss = sliced_wasserstein_distance(z_t1, z_t0)
-                            loss += cfr_weight * align_loss
-                            loss_comp["cfr_align_loss"] = (cfr_weight * align_loss).item()
-                    elif current_cfg.get("model") == "DESCN":
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, loss_comp = compute_descn_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg)
-                    else:
-                        y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
-                        loss, _ = compute_stage3_loss(y0_pred, y1_pred, y, t, pi_dict, current_cfg, dro_criterion=dro_criterion)
+                    y0_pred, y1_pred, pi_dict = model(x_cont, x_cat)
+                    loss, _ = compute_stage3_loss(
+                        y0_pred, y1_pred, y, t, pi_dict, current_cfg, dro_criterion=dro_criterion
+                    )
             
             scaler.scale(loss / accumulate_steps).backward()
             
