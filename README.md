@@ -101,16 +101,19 @@ The released outcome config uses batch size 262144 and four gradient-accumulatio
 |---|---|
 | `checkpoints/mediator/best_model.pth` | `checkpoints/mediator/best_config.json` |
 | `checkpoints/criteo_seed42/best_model.pth` | `checkpoints/criteo_seed42/best_config.json` |
+| `checkpoints/criteo_seed1042/best_model.pth` | `checkpoints/criteo_seed1042/best_config.json` |
+| `checkpoints/criteo_seed2042/best_model.pth` | `checkpoints/criteo_seed2042/best_config.json` |
+| `checkpoints/criteo_seed3042/best_model.pth` | `checkpoints/criteo_seed3042/best_config.json` |
 
-The mediator is the Stage I TARNet, seed 42. The outcome file is the seed-42 PRISM checkpoint.
+The mediator is the Stage I TARNet, seed 42. The outcome files are the four reported PRISM seeds; seed 42 is the default released checkpoint.
 
 ## Metrics
 
 Users are ranked by predicted uplift, `sigmoid(y1) - sigmoid(y0)`. AUUC is the area under the uplift curve after the curve is scaled to end at 1. Qini is the area under the scaled Qini curve, minus 1/2. Early stopping uses validation AUUC.
 
-| Seed | Valid AUUC | Test AUUC | Test Qini |
-|---|---:|---:|---:|
-| 42 | 0.8940 | 0.9145 | 0.4177 |
-| 1042 | 0.8844 | 0.9108 | 0.4139 |
-| 2042 | 0.8923 | 0.9149 | 0.4173 |
-| 3042 | 0.8854 | 0.9121 | 0.4154 |
+| Seed | Test AUUC | Test Qini |
+|---|---:|---:|
+| 42 | 0.9145 | 0.4177 |
+| 1042 | 0.9108 | 0.4139 |
+| 2042 | 0.9149 | 0.4173 |
+| 3042 | 0.9121 | 0.4154 |
