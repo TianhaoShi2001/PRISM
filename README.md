@@ -77,7 +77,7 @@ The same command is:
 python main.py --mode reproduce --config_path checkpoints/criteo_seed42/best_config.json --seed 42 --cuda 0
 ```
 
-`--seed 1042`, `--seed 2042`, and `--seed 3042` repeat the outcome run at the other reported seeds. Seed 42 is the released checkpoint: among the four, its validation AUUC is the highest, and early stopping watches that number. Training stops after 10 epochs without an improvement, or at 100 epochs. A seed that already has `final_metrics.json` is skipped.
+Seed 42 is the released checkpoint. Early stopping watches validation AUUC. Training stops after 10 epochs without an improvement, or at 100 epochs. A seed that already has `final_metrics.json` is skipped.
 
 Outcome logs and metrics go to `results/criteo/prism/seed_<seed>/`.
 
@@ -101,11 +101,8 @@ The released outcome config uses batch size 262144 and four gradient-accumulatio
 |---|---|
 | `checkpoints/mediator/best_model.pth` | `checkpoints/mediator/best_config.json` |
 | `checkpoints/criteo_seed42/best_model.pth` | `checkpoints/criteo_seed42/best_config.json` |
-| `checkpoints/criteo_seed1042/best_model.pth` | `checkpoints/criteo_seed1042/best_config.json` |
-| `checkpoints/criteo_seed2042/best_model.pth` | `checkpoints/criteo_seed2042/best_config.json` |
-| `checkpoints/criteo_seed3042/best_model.pth` | `checkpoints/criteo_seed3042/best_config.json` |
 
-The mediator is the Stage I TARNet, seed 42. The outcome files are the four reported PRISM seeds; seed 42 is the default released checkpoint.
+The mediator is the Stage I TARNet, seed 42. The outcome file is the released PRISM checkpoint (seed 42).
 
 ## Metrics
 
@@ -114,6 +111,3 @@ Users are ranked by predicted uplift, `sigmoid(y1) - sigmoid(y0)`. AUUC is the a
 | Seed | Test AUUC | Test Qini |
 |---|---:|---:|
 | 42 | 0.9145 | 0.4177 |
-| 1042 | 0.9108 | 0.4139 |
-| 2042 | 0.9149 | 0.4173 |
-| 3042 | 0.9121 | 0.4154 |
